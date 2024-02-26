@@ -1,17 +1,37 @@
 #include <SPI.h>
 #include <MFRC522.h>
+#include <WiFi.h>
+#include <Firebase_ESP_Client.h>
+#include "addons/TokenHelper.h"
+#include "addons/RTDBHelper.h"
 
 #define SS_PIN 5
 #define RST_PIN 0
- 
+#define WIFI_SSID "비밀번호 12345678"
+#define WIFI_PASSWORD "dongwook"
+#define API_KEY "AIzaSyDtHBVBmcG3gcYxhhBXD0DceS8QVymgm8M"
+#define DATABASE_URL "https://umbrella-system-6eeb4-default-rtdb.firebaseio.com"
+
 MFRC522 RFID(SS_PIN, RST_PIN);
 
 MFRC522::MIFARE_Key KEY; 
-
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
 byte nuidPICC[4];
 
 void setup() {
   Serial.begin(115200);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(300);
+  }
+  Serial.println();
+  Serial.print("Connected with IP: ");
+  Serial.println(WiFi.localIP());
+  Serial.println();
   SPI.begin();
   RFID.PCD_Init();
   for (byte i = 0; i < 6; i++) {
@@ -20,6 +40,19 @@ void setup() {
   Serial.println(F("This code scan the MIFARE Classsic NUID."));
   Serial.print(F("Using the following key:"));
   printHex(KEY.keyByte, MFRC522::MF_KEY_SIZE);
+  config.api_key = API_KEY;
+
+  config.database_url = DATABASE_URL;
+
+  if (Firebase.signUp(&config, &auth, "", "")) {
+    Serial.println("ok");
+  }
+  else {
+    Serial.printf("%s\n", config.signer.signupError.message.c_str());
+  }
+  config.token_status_callback = tokenStatusCallback;
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
 }
  
 void loop() {
@@ -48,6 +81,7 @@ void loop() {
     Serial.print(F("In dec: "));
     printDec(RFID.uid.uidByte, RFID.uid.size);
     Serial.println();
+    Firebase.RTDB.setInt(&fbdo, "/ESP32", RFID.uid.uidByte[0]);
   }
   else Serial.println(F("Card read previously."));
 
